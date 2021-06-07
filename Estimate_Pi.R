@@ -8,6 +8,7 @@ library(fitdistrplus)
 
 # Empirical Methods -------------------------------------------------------
 
+# generate uniformly distributed points
 generate_points <- function(n){
   
   # put them in a matrix
@@ -17,6 +18,7 @@ generate_points <- function(n){
 
 }
 
+# calculate vector norm and check whether point is within radius (i.e. < 1)
 get_distance <- function(XY){
   
   # calculate vector norm and test if its bigger than the radius (i.e. 1)
@@ -24,7 +26,7 @@ get_distance <- function(XY){
   return(dist)
 }
 
-
+# approximate pi using 4*points_within_circle/total_points
 approx_pi <- function(dist){
   # pi*r^2 / 4 == numb_circle / numb_total (divided by for because we have just one quadrant)
   return(4*sum(dist)/length(dist))
@@ -34,8 +36,7 @@ approx_pi <- function(dist){
 
 # Resampling Methods ------------------------------------------------------
 
-
-
+# calculate ratio of points within
 calc_ratio <- function(n, samplingSize, plot){
   distMatrix <- matrix(get_distance(generate_points(n)), nrow = samplingSize)
   ratioVector <- rowSums(distMatrix)/ncol(distMatrix)
@@ -47,6 +48,7 @@ calc_ratio <- function(n, samplingSize, plot){
   return(ratioVector)
 }
 
+# fit a gamma distribution to ratio data set and sample from gamma
 generate_gamma <- function(ratioVector, outputLength, plot){
   thetaGamma <- fitdistr(ratioVector, "gamma")$estimate 
   
@@ -58,9 +60,10 @@ generate_gamma <- function(ratioVector, outputLength, plot){
   return(rgamma(outputLength,shape = thetaGamma[1],rate = thetaGamma[2]))  
 }
 
-approx_pi_resample <- function(rgammaVec, accuracyHeuristic){
-  withinCircle <- mean(rgammaVec) * accuracyHeuristic
-  outsideCircle <- accuracyHeuristic - withinCircle 
+# approximate pi (same as above). Heuristic is 
+approx_pi_resample <- function(rgammaVec){
+  withinCircle <- mean(rgammaVec)
+  outsideCircle <- 1 - withinCircle 
   
   return(4*(withinCircle/(withinCircle+outsideCircle)))
 }
@@ -128,8 +131,7 @@ estimate_pi_resampled <- function(n,
 
 estimate_pi_resampled(n = 100000,
                       outputLength = 1e6,
-                      samplingSize = 1000,
-                      accuracyHeuristic = 1e9)
+                      samplingSize = 1000)
 
 
 
