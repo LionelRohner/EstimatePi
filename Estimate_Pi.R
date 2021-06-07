@@ -85,7 +85,7 @@ estimate_pi_empirical <- function(n){
 estimate_pi_v2 <- function(n){
   pis <- c()
   for (i in 1:1000){
-    points <- generate_points_distance(n = n%/%1000)
+    points <- generate_points(n = n%/%1000)
     dist <- get_distance(points)
     approxed_pi <- approx_pi(dist = dist)
     pis <- c(pis,approxed_pi)
@@ -98,9 +98,8 @@ estimate_pi_v2 <- function(n){
 # within the radius is sampled from a fitted gamma distribution. Currently, the 
 # mean of randomly generated data from this vector is used to 
 estimate_pi_resampled <- function(n,
-                                  outputLength = 1000,
-                                  samplingSize = 100,
-                                  accuracyHeuristic = 1e6,
+                                  outputLength = 1e6,
+                                  samplingSize = 1e4,
                                   plot = F){
   
   if(!require(fitdistrplus)){
@@ -120,25 +119,74 @@ estimate_pi_resampled <- function(n,
                        plot = plot, outputLength = outputLength)
   
   # use resampled data to approx pi
-  return(approx_pi_resample(rG, accuracyHeuristic = accuracyHeuristic))
+  return(approx_pi_resample(rG))
 }
 
 
+# Auxiliary Functions -----------------------------------------------------
+
+# the smaller the number the better
+accuracy_pi_estimate <- function(pi_estimate){
+  return(abs(pi_estimate-pi))
+}
+
+scoring <- function(res){
+  if(res > 1){
+    return(0)
+  } else if (res > 0.1){
+    return(1)
+  } else if(res > 0.01){
+    return(2)
+  } else if(res > 0.001){
+    return(3)
+  } else if(res > 0.0001){
+    return(4)
+  } else if(res > 0.00001){
+    return(5)
+  } else{
+    return(6)
+  } 
+}
+
+test_accuracy <- function(n, nIter, type){
+  
+  vecAccuracy = c() 
+  
+  if (type == "empirical"){
+    for (i in 1:nIter){
+      estimate <- accuracy_pi_estimate(estimate_pi_empirical(n))
+      score <- scoring(estimate)
+      vecAccuracy = c(vecAccuracy, score)
+    }
+    DF <- data.frame(nIter, mean(vecAccuracy), sd(vecAccuracy), min(vecAccuracy), max(vecAccuracy))
+    colnames(DF) <- c("Iterations", "Mean Score", "SD Score", "Min Score", "Max Score")
+    return(DF)
+  } else {
+    for (i in 1:nIter){
+      estimate <- accuracy_pi_estimate(estimate_pi_resampled(n))
+      score <- scoring(estimate)
+      vecAccuracy = c(vecAccuracy, score)
+    }
+    DF <- data.frame(nIter, mean(vecAccuracy), sd(vecAccuracy), min(vecAccuracy), max(vecAccuracy))
+    colnames(DF) <- c("Iterations", "Mean Score", "SD Score", "Min Score", "Max Score")
+    return(DF)
+  }
+  
+}
 
 # Test functions ----------------------------------------------------------
 
+test_accuracy(n = 1e6, nIter = 10, type = "empirical")
 
-
-estimate_pi_resampled(n = 100000,
+estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
-                      samplingSize = 1000)
+                      samplingSize = 1e4)
 
 
-
+scoring(accuracy_pi_estimate(pi))
 
 
 # BenchMark (Speed) -------------------------------------------------------
-
 
 
 n = 1e7
@@ -155,6 +203,4 @@ test
 # BenchMark (Accuracy) ----------------------------------------------------
 
 
-# WRITE A FUNCTION THAT COMPARES ACCURACY OF PI
 
-accuracy_pi_estimate <- function
