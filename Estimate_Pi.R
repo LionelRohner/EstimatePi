@@ -60,7 +60,7 @@ generate_gamma <- function(ratioVector, outputLength, plot){
   return(rgamma(outputLength,shape = thetaGamma[1],rate = thetaGamma[2]))  
 }
 
-# approximate pi (same as above). Heuristic is 
+# approximate pi (same as above).  
 approx_pi_resample <- function(rgammaVec){
   withinCircle <- mean(rgammaVec)
   outsideCircle <- 1 - withinCircle 
@@ -106,8 +106,6 @@ estimate_pi_resampled <- function(n,
     message("Install 'fitdistrplus' first!")
     return(NULL)
   }
-  
-  samplingSize = n/1000
   
   # # ratio of at least 100 data should be used to get ratios
   # if(n/samplingSize < 100){
@@ -217,15 +215,37 @@ mean_estimate <- function(n, nIter, type){
   colnames(DF) <- c("Iterations", "Mean Score", "SD Score", "Min Score", "Max Score")
   return(DF)
 }
+
+
 # Test functions ----------------------------------------------------------
+
+# find best params (single)
+RES <- c()
+seqN <- seq(1e3,1e5,1e3)
+for (i in seqN){
+  piVec <- c()
+  for (j in 1:100){
+    pi <- estimate_pi_resampled(n = 1e6,
+                                outputLength = 1e6,
+                                samplingSize = i,
+                                plot = F)
+   piVec <- c(piVec,pi) 
+  }
+  cat(sprintf("\r%.3f%%", (i / (1e5) * 100)))
+  RES <- rbind(RES,abs(mean(piVec)-pi))
+}; rownames(RES) <- seqN
+
+
 
 
 estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
-                      samplingSize = 0,
+                      samplingSize = 1000,
                       plot =T)
 
 
+
+calc_ratio(100,10, plot = F)
 
 # BenchMark (Speed) -------------------------------------------------------
 
