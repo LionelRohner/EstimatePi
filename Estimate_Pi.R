@@ -60,6 +60,19 @@ generate_gamma <- function(ratioVector, outputLength, plot){
   return(rgamma(outputLength,shape = thetaGamma[1],rate = thetaGamma[2]))  
 }
 
+# fit a beta distribution to ratio data set and sample from this distribution
+generate_beta <- function(ratioVector, outputLength, plot){
+  thetaBeta <- fitdistr(ratioVector, "beta")$estimate 
+  
+  # histogram
+  if (plot){
+    hist(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]),
+         add = T, col = rgb(0.9,0.1,0.1,0.2), freq = F)
+  }
+  return(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]))  
+}
+
+
 # approximate pi (same as above).  
 approx_pi_resample <- function(rgammaVec){
   withinCircle <- mean(rgammaVec)
@@ -102,7 +115,7 @@ estimate_pi_resampled <- function(n,
   
   # generate ratios from n
   # create gamma distribution
-  rG <- generate_gamma(calc_ratio(n, samplingSize = samplingSize, plot = plot),
+  rG <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
                        plot = plot, outputLength = outputLength)
   
   # use resampled data to approx pi
@@ -231,7 +244,26 @@ estimate_pi_resampled(n = 1e6,
 
 
 
-calc_ratio(100,10, plot = F)
+
+# fit a beta distribution to ratio data set and sample from this distribution
+generate_beta <- function(ratioVector, outputLength, plot){
+  thetaBeta <- fitdistr(ratioVector, "beta")$estimate 
+  
+  # histogram
+  if (plot){
+    hist(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]),
+         add = T, col = rgb(0.9,0.1,0.1,0.2), freq = F)
+  }
+  return(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]))  
+}
+
+
+ratioVector <- calc_ratio(100,10, plot = F)
+starter <- DataFrame({'shape1':0.5,'shape2':0.5})
+
+thetaBeta <- fitdistr(ratioVector, "beta",start = starter)$estimate 
+
+generate_beta(calc_ratio(100,10, plot = F))
 
 # BenchMark (Speed) -------------------------------------------------------
 
