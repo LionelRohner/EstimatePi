@@ -79,20 +79,6 @@ estimate_pi_empirical <- function(n){
   return(approx_pi(dist = dist))
 }
 
-# more or less exactly the same speed. The idea was to average the dist matrix
-# values by generating many small matrices instead of one big, since matrix/vecs 
-# bigger than 1e7 get really slow to generate.
-estimate_pi_v2 <- function(n){
-  pis <- c()
-  for (i in 1:1000){
-    points <- generate_points(n = n%/%1000)
-    dist <- get_distance(points)
-    approxed_pi <- approx_pi(dist = dist)
-    pis <- c(pis,approxed_pi)
-  }
-  return(mean(pis))
-}
-
 
 # this function uses a probabilistic approach. The ratio of points that are
 # within the radius is sampled from a fitted gamma distribution. Currently, the 
