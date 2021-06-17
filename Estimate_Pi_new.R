@@ -1,4 +1,3 @@
-
 # Library -----------------------------------------------------------------
 
 library(rbenchmark)
@@ -76,10 +75,10 @@ beta_mom <- function(x) {
 }
 
 # fit a beta distribution to ratio data set and sample from this distribution
-generate_beta <- function(ratioVector, outputLength){
+generate_beta <- function(ratioVector, outputLength, plot){
   
   # remove 1s and 0s (the latter is very unlikely)
-  ratioVector <- ratioVector[-which(ratioVector == 1 | ratioVector == 0)]
+  ratioVector <- ratioVector[which(ratioVector < 1)]
 
   
   # use methods of moments to get an estimate for alpha (shape1) and beta (shape2)
@@ -100,6 +99,22 @@ generate_beta <- function(ratioVector, outputLength){
 
   # generate data from the beta-distribution with MLE-estimates
   return(rbeta(outputLength, shape1 = thetaBeta[1], shape2 = thetaBeta[2]))  
+}
+
+
+# fit a beta distribution to ratio data set and sample from this distribution
+get_beta_dist <- function(ratioVector){
+  
+  # remove 1s and 0s (the latter is very unlikely)
+  ratioVector <- ratioVector[which(ratioVector < 1)]
+  
+  
+  # use methods of moments to get an estimate for alpha (shape1) and beta (shape2)
+  # fitdistr needs starting values for beta-distribution
+  thetaBetaStartValues <- beta_mom(ratioVector)
+  
+  # MLE of beta distribution given ratioVector data 
+  return(fitdistr(ratioVector, "beta", start=thetaBetaStartValues)$estimate) 
 }
 
 
@@ -137,12 +152,7 @@ estimate_pi_resampled <- function(n,
     return(NULL)
   }
   
-  # # ratio of at least 100 data should be used to get ratios
-  # if(n/samplingSize < 100){
-  #   message("Choose bigger n or smaller sampling size")
-  #   return(NULL)
-  # }
-  
+
   # generate ratios from n
   # create gamma distribution
   if(distr == "beta"){
@@ -158,6 +168,55 @@ estimate_pi_resampled <- function(n,
   # use resampled data to approx pi
   return(approx_pi_resample(rand))
 }
+
+
+
+
+MCMC_Pi <- function(nInit = 1e6,nSD = 1000, nIter){
+  
+  # 0.) initialize result vector and get a value for d
+  x <- rep(0,nIter)
+  
+  d <- 2*sd(calc_ratio(nInit,nSD,F))
+  
+  # 1.) create a prior distribution
+  
+  # beta parameter from 1e6 ratios >> prior distribution params
+  thetaBetaMLE <- get_beta_dist(calc_ratio(1e6,1e4,F))
+  
+  # mean of beta distribution
+  meanBeta <- unname(1/(1+(thetaBetaMLE[2]/thetaBetaMLE[1])))
+  
+  pbeta(meanBeta,shape1 = thetaBetaMLE[1], shape2 = thetaBetaMLE[2])
+  
+  # 2.) Propose first move (start with mean of prior)
+  x[1] <- meanBeta
+  
+  # 3.) Initiate loop
+  
+  for (iter in 2:nIter){
+    
+    # 4.) propose a move with uniform proposal kernel
+    x[iter] <- runif(n = 1, min = x[iter-1]-d/2, max=x[iter-1]+d/2) 
+    
+    # 3.) Compute accuracy, accept move if accuracy is better else stay
+    current <- abs(approx_pi_resample(x[iter]) - pi)
+    previous <- abs(approx_pi_resample(x[iter-1]) - pi)
+    
+    if (current < previous){
+      next
+    } else {
+      x[iter] <- x[iter-1]
+    }
+    
+  }
+  return(x)
+}
+
+posterior <- MCMC_Pi(nIter = 100000)
+
+approx_pi_resample(tail(posterior,n = 1))
+
 
 
 # Auxiliary Functions -----------------------------------------------------
@@ -276,18 +335,9 @@ mean_estimate <- function(n,
 
 estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
-                      samplingSize = 1000,
+                      samplingSize = 1e4,
                       plot = F,
                       distr = "beta")
-
-
-n = 1e6
-outputLength = 1e6
-samplingSize = 1000
-plot = T
-
-rand <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
-                      plot = plot, outputLength = outputLength)
 
 
 # BenchMark (Speed) -------------------------------------------------------
@@ -307,8 +357,13 @@ test
 
 
 # Accurcay Scores
-test_accuracy(n = 1e5, nIter = 100, type = "empirical")
-test_accuracy(n = 1e5, nIter = 100, type = "resampled")
+gamma <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "gamma", nIter = 1000, type = "resampled")
+beta <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "beta", nIter = 1000, type = "resampled")
+norm <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "beta", nIter = 1000, type = "empirical")
+
+gamma
+beta
+norm
 
 
 # Accuracy of Estimate (raw)
