@@ -171,18 +171,17 @@ estimate_pi_resampled <- function(n,
 
 
 
-
-MCMC_Pi <- function(nInit = 1e6,nSD = 1000, nIter){
+MCMC_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   
   # 0.) initialize result vector and get a value for d
   x <- rep(0,nIter)
   
-  d <- 2*sd(calc_ratio(nInit,nSD,F))
+  d <- sd(calc_ratio(nInit,nSD,F))
   
   # 1.) create a prior distribution
   
   # beta parameter from 1e6 ratios >> prior distribution params
-  thetaBetaMLE <- get_beta_dist(calc_ratio(1e6,1e4,F))
+  thetaBetaMLE <- get_beta_dist(calc_ratio(nInit,samplingSize,F))
   
   # mean of beta distribution
   meanBeta <- unname(1/(1+(thetaBetaMLE[2]/thetaBetaMLE[1])))
@@ -213,11 +212,6 @@ MCMC_Pi <- function(nInit = 1e6,nSD = 1000, nIter){
   return(x)
 }
 
-posterior <- MCMC_Pi(nIter = 100000)
-
-approx_pi_resample(tail(posterior,n = 1))
-
-
 
 # Auxiliary Functions -----------------------------------------------------
 
@@ -244,7 +238,7 @@ scoring <- function(res){
   } 
 }
 
-# compare time and score of accuracy
+# compare time and score of accuracy, not for MCMC as we only consider the last values
 test_accuracy <- function(n,
                           nIter,
                           type,
@@ -332,12 +326,23 @@ mean_estimate <- function(n,
 
 # Test functions ----------------------------------------------------------
 
+# empirical
+estimate_pi_empirical(1e6)
 
+# resampled
 estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
                       samplingSize = 1e4,
                       plot = F,
                       distr = "beta")
+
+# MCMC (super accurate)
+posterior <- MCMC_Pi(nIter = 1e5)
+plot(4*posterior, type = "l")
+abline(h=pi, col = "firebrick")
+
+100000000*approx_pi_resample(tail(posterior,n = 1))
+
 
 
 # BenchMark (Speed) -------------------------------------------------------
@@ -347,6 +352,7 @@ n = 1e6
 
 test <- benchmark("empirical" = {estimate_pi_empirical(n)},
                   "resampled" = {estimate_pi_resampled(n)},
+                  "MCMC"      = {MCMC_Pi(nIter = 1e5)}
                   replications = 10)
 
 test$meanTime <- test$elapsed/test$replications
@@ -360,6 +366,7 @@ test
 gamma <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "gamma", nIter = 1000, type = "resampled")
 beta <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "beta", nIter = 1000, type = "resampled")
 norm <- test_accuracy(n = 1e6, samplingSize = 1e4, outputLength = 1e6, distr = "beta", nIter = 1000, type = "empirical")
+
 
 gamma
 beta
