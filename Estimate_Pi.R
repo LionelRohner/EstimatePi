@@ -52,6 +52,8 @@ calc_ratio <- function(n, samplingSize, plot){
 generate_gamma <- function(ratioVector, outputLength, plot){
   thetaGamma <- fitdistr(ratioVector, "gamma")$estimate 
   
+  set.seed(sample(1:1e6,1))
+  
   # histogram
   if (plot){
     hist(rgamma(outputLength,shape = thetaGamma[1],rate = thetaGamma[2]),
@@ -60,22 +62,50 @@ generate_gamma <- function(ratioVector, outputLength, plot){
   return(rgamma(outputLength,shape = thetaGamma[1],rate = thetaGamma[2]))  
 }
 
+# from: https://stats.stackexchange.com/questions/376634/how-to-pick-starting-parameters-for-massfitdist-with-the-beta-distribution
+beta_mom <- function(x) {
+  
+  m_x <- mean(x, na.rm = TRUE)
+  s_x <- sd(x, na.rm = TRUE)
+  
+  alpha <- m_x*((m_x*(1 - m_x)/s_x^2) - 1)
+  beta <- (1 - m_x)*((m_x*(1 - m_x)/s_x^2) - 1)
+  
+  return(list(shape1 = alpha, shape2 = beta))
+  
+}
+
 # fit a beta distribution to ratio data set and sample from this distribution
-generate_beta <- function(ratioVector, outputLength, plot){
-  thetaBeta <- fitdistr(ratioVector, "beta")$estimate 
+generate_beta <- function(ratioVector, outputLength){
+  
+  # remove 1s and 0s (the latter is very unlikely)
+  ratioVector <- ratioVector[-which(ratioVector == 1 | ratioVector == 0)]
+
+  
+  # use methods of moments to get an estimate for alpha (shape1) and beta (shape2)
+  # fitdistr needs starting values for beta-distribution
+  thetaBetaStartValues <- beta_mom(ratioVector)
+  
+  # MLE of beta distribution given ratioVector data 
+  thetaBeta <- fitdistr(ratioVector, "beta", start=thetaBetaStartValues)$estimate 
+  
+  
+  # set.seed(sample(1:1e6,1))
   
   # histogram
   if (plot){
     hist(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]),
          add = T, col = rgb(0.9,0.1,0.1,0.2), freq = F)
   }
-  return(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]))  
+
+  # generate data from the beta-distribution with MLE-estimates
+  return(rbeta(outputLength, shape1 = thetaBeta[1], shape2 = thetaBeta[2]))  
 }
 
 
 # approximate pi (same as above).  
-approx_pi_resample <- function(rgammaVec){
-  withinCircle <- mean(rgammaVec)
+approx_pi_resample <- function(randVec){
+  withinCircle <- mean(randVec)
   outsideCircle <- 1 - withinCircle 
   
   return(4*(withinCircle/(withinCircle+outsideCircle)))
@@ -99,6 +129,7 @@ estimate_pi_empirical <- function(n){
 estimate_pi_resampled <- function(n,
                                   outputLength = 1e6,
                                   samplingSize = 1e5,
+                                  distr = "beta",
                                   plot = F){
   
   if(!require(fitdistrplus)){ 
@@ -112,14 +143,20 @@ estimate_pi_resampled <- function(n,
   #   return(NULL)
   # }
   
-  
   # generate ratios from n
   # create gamma distribution
-  rG <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
-                       plot = plot, outputLength = outputLength)
+  if(distr == "beta"){
+    rand <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
+                        plot = plot, outputLength = outputLength)
+    
+  } else {
+    rand <- generate_gamma(calc_ratio(n, samplingSize = samplingSize, plot = plot),
+                        plot = plot, outputLength = outputLength)
+    
+  }
   
   # use resampled data to approx pi
-  return(approx_pi_resample(rG))
+  return(approx_pi_resample(rand))
 }
 
 
@@ -148,7 +185,13 @@ scoring <- function(res){
   } 
 }
 
-test_accuracy <- function(n, nIter, type){
+# compare time and score of accuracy
+test_accuracy <- function(n,
+                          nIter,
+                          type,
+                          samplingSize = 1e4,
+                          outputLength = 1e6,
+                          distr = "beta"){
   
   # Scoring Output
   message("Scoring Calculation: Difference = estimated pi minus real pi \n")
@@ -162,9 +205,10 @@ test_accuracy <- function(n, nIter, type){
   message("Difference < 0.000001 : Score = 6 \n")
 
   
-  
+  # create vector for accuracy measure
   vecAccuracy = c() 
   
+  # loop for nIter
   if (type == "empirical"){
     message("Method : Empirical \n")
     for (i in 1:nIter){
@@ -176,7 +220,10 @@ test_accuracy <- function(n, nIter, type){
   } else {
     message("Method : Resampled \n")
     for (i in 1:nIter){
-      estimate <- accuracy_pi_estimate(estimate_pi_resampled(n))
+      estimate <- accuracy_pi_estimate(estimate_pi_resampled(n,
+                                                             samplingSize = samplingSize,
+                                                             outputLength = outputLength,
+                                                             distr = distr))
       score <- scoring(estimate)
       vecAccuracy = c(vecAccuracy, score)
     }
@@ -191,8 +238,13 @@ test_accuracy <- function(n, nIter, type){
    
 }
 
-
-mean_estimate <- function(n, nIter, type){
+# descriptive statistics of the pi estimate collected from several iterations
+mean_estimate <- function(n,
+                          nIter,
+                          type,
+                          samplingSize = 1e4,
+                          outputLength = 1e6,
+                          distr = "beta"){
   
   vecAccuracy = c() 
   
@@ -204,7 +256,10 @@ mean_estimate <- function(n, nIter, type){
 
   } else {
     for (i in 1:nIter){
-      estimate <- estimate_pi_resampled(n)
+      estimate <- accuracy_pi_estimate(estimate_pi_resampled(n,
+                                                             samplingSize = samplingSize,
+                                                             outputLength = outputLength,
+                                                             distr = distr))
       vecAccuracy = c(vecAccuracy, estimate)
     }
 
@@ -218,52 +273,22 @@ mean_estimate <- function(n, nIter, type){
 
 # Test functions ----------------------------------------------------------
 
-# find best params (single)
-RES <- c()
-seqN <- seq(1e3,1e5,1e3)
-for (i in seqN){
-  piVec <- c()
-  for (j in 1:100){
-    pi <- estimate_pi_resampled(n = 1e6,
-                                outputLength = 1e6,
-                                samplingSize = i,
-                                plot = F)
-   piVec <- c(piVec,pi) 
-  }
-  cat(sprintf("\r%.3f%%", (i / (1e5) * 100)))
-  RES <- rbind(RES,abs(mean(piVec)-pi))
-}; rownames(RES) <- seqN
-
-
-
 
 estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
                       samplingSize = 1000,
-                      plot =T)
+                      plot = F,
+                      distr = "beta")
 
 
+n = 1e6
+outputLength = 1e6
+samplingSize = 1000
+plot = T
 
+rand <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
+                      plot = plot, outputLength = outputLength)
 
-# fit a beta distribution to ratio data set and sample from this distribution
-generate_beta <- function(ratioVector, outputLength, plot){
-  thetaBeta <- fitdistr(ratioVector, "beta")$estimate 
-  
-  # histogram
-  if (plot){
-    hist(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]),
-         add = T, col = rgb(0.9,0.1,0.1,0.2), freq = F)
-  }
-  return(rbeta(outputLength,shape1 = thetaBeta[1],shape2 = thetaBeta[2]))  
-}
-
-
-ratioVector <- calc_ratio(100,10, plot = F)
-starter <- DataFrame({'shape1':0.5,'shape2':0.5})
-
-thetaBeta <- fitdistr(ratioVector, "beta",start = starter)$estimate 
-
-generate_beta(calc_ratio(100,10, plot = F))
 
 # BenchMark (Speed) -------------------------------------------------------
 
@@ -292,3 +317,22 @@ mean_estimate(n = 1e6, nIter = 100, type = "resampled")
 
 
 # As expected the accuracies are more or less the same
+
+
+# Garbage Code ------------------------------------------------------------
+
+# find best params (single)
+RES <- c()
+seqN <- seq(1e3,1e5,1e3)
+for (i in seqN){
+  piVec <- c()
+  for (j in 1:100){
+    pi <- estimate_pi_resampled(n = 1e6,
+                                outputLength = 1e6,
+                                samplingSize = i,
+                                plot = F)
+    piVec <- c(piVec,pi) 
+  }
+  cat(sprintf("\r%.3f%%", (i / (1e5) * 100)))
+  RES <- rbind(RES,abs(mean(piVec)-pi))
+}; rownames(RES) <- seqN
