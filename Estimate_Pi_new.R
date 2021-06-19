@@ -170,7 +170,9 @@ estimate_pi_resampled <- function(n,
 }
 
 
-
+# MCMC-like algorithm, but instead of using a hastings ratio, I used the accuracy measure,
+# which kinda breaks the purpose of the MCMC, which is used when the true value is unknown.
+# But heck, its just for fun, right.
 MCMC_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   
   # 0.) initialize result vector and get a value for d
