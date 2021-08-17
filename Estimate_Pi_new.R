@@ -214,6 +214,53 @@ MCMC_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   return(x)
 }
 
+# Metropolis-Hastings Algo. same as above but with real hastings ratio
+MCMC_h_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
+  
+  # 0.) initialize result vector and get a value for d
+  x <- rep(0,nIter)
+  
+  d <- sd(calc_ratio(nInit,nSD,F))
+  d <- 0.2
+  
+  # 1.) create a prior distribution
+  
+  # beta parameter from 1e6 ratios >> prior distribution params
+  thetaBetaMLE <- get_beta_dist(calc_ratio(nInit,samplingSize,F))
+  
+  # mean of beta distribution
+  meanBeta <- unname(1/(1+(thetaBetaMLE[2]/thetaBetaMLE[1])))
+  
+  
+  # 2.) Propose first move (start with mean of prior)
+  x[1] <- meanBeta
+  
+  # 3.) Initiate loop
+  
+  for (iter in 2:nIter){
+    
+    # 4.) propose a move with uniform proposal kernel
+    x[iter] <- runif(n = 1, min = x[iter-1]-d/2, max=x[iter-1]+d/2) 
+    
+    # 5.) hastings ratio
+    current <- dbeta(x[iter],shape1 = thetaBetaMLE[1], shape2 = thetaBetaMLE[2])
+    previous <- dbeta(x[iter-1],shape1 = thetaBetaMLE[1], shape2 = thetaBetaMLE[2])
+    
+    h <- min(1,current/previous)
+    
+    # 6.) decide move
+    u <- runif(1,0,1)
+    if (u <= h){
+      next # accept >> next iteration
+    } else {
+      x[iter] <- x[iter-1] # reject >> repeat
+    }
+   
+    
+  }
+  return(x)
+}
+
 
 # Auxiliary Functions -----------------------------------------------------
 
@@ -328,22 +375,32 @@ mean_estimate <- function(n,
 
 # Test functions ----------------------------------------------------------
 
-# empirical
+### empirical
 estimate_pi_empirical(1e6)
 
-# resampled
+### resampled
 estimate_pi_resampled(n = 1e6,
                       outputLength = 1e6,
                       samplingSize = 1e4,
                       plot = F,
                       distr = "beta")
 
-# MCMC (super accurate)
-posterior <- MCMC_Pi(nIter = 1e5)
+### MCMC-like cheat algo (super accurate)
+posterior <- MCMC_Pi(nIter = 1e4)
+approx_pi_resample(tail(posterior,n = 1))
+
+# plot trace
 plot(4*posterior, type = "l")
 abline(h=pi, col = "firebrick")
 
-100000000*approx_pi_resample(tail(posterior,n = 1))
+
+### Metropolis-Hastings Algo that explores ratio beta distribution
+posterior <- MCMC_h_Pi(nIter = 1e5)
+approx_pi_resample(posterior)
+
+# plot trace
+plot(4*posterior, type = "l")
+abline(h=pi, col = "firebrick")
 
 
 
