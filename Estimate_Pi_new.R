@@ -1,11 +1,23 @@
+#------------------------------------------------------------------------------#
 # Library -----------------------------------------------------------------
+#------------------------------------------------------------------------------#
+
 
 library(rbenchmark)
 
 library(fitdistrplus)
 
-
+#------------------------------------------------------------------------------#
 # Empirical Methods -------------------------------------------------------
+#------------------------------------------------------------------------------#
+
+# Idea: Generate uniformly distributed points between 0 and 1 and consider them
+#       to be vectors pointing to that random coordinate. Next count the vectors
+#       that have a vector norm of less than 1, i.e. points within the unit circle.
+#       The ratio of the points within to the points beyond the unit circle,
+#       are an approximation of pi/4.
+#
+#       The accurcacy of the estimate dependens on the number of generated uniform points
 
 # generate uniformly distributed points
 generate_points <- function(n){
@@ -32,8 +44,32 @@ approx_pi <- function(dist){
 }
 
 
+# Main Function Empirical -------------------------------------------------
+
+
+# empirical version just generates data between 0 and 1 and calculates the
+# to the radius of the unit circle.
+# More details here : https://en.wikipedia.org/wiki/Approximations_of_%CF%80#Summing_a_circle's_area
+estimate_pi_empirical <- function(n){
+  dist <- get_distance(generate_points(n = n))
+  return(approx_pi(dist = dist))
+}
+
 
 # Resampling Methods ------------------------------------------------------
+
+# Idea: The idea is to circumvent the generation of high numbers of points to
+#       get an accurate approximate of pi. Instead, we calculate rather innacurate 
+#       estimates of the ratio of points within to beyond the unit circle and generate
+#       a beta or gamma distribution of the ratios. Parameter estimation of 
+#       the beta distribution is based on the methods of moments to find starting
+#       values for alpha and beta in ~ Beta(alpha, beta). Once the distribution
+#       is setup, we sample from that said distribution and take the mean of the
+#       distribution, which should be a good estimate of pi.
+#
+#       This method has many parameters, such as, the number of points to calculate
+#       one ratio, the number of initial ratios to generate, the number of ratios
+#       to draw from the newly made distribution, thus this needs some optimization.
 
 # calculate ratio of points within
 calc_ratio <- function(n, samplingSize, plot){
@@ -125,43 +161,35 @@ approx_pi_resample <- function(randVec){
   
   return(4*(withinCircle/(withinCircle+outsideCircle)))
 }
-  
 
-# Main Function -----------------------------------------------------------
-
-# empirical version just generates data between 0 and 1 and calculates the
-# to the radius of the unit circle.
-# More details here : https://en.wikipedia.org/wiki/Approximations_of_%CF%80#Summing_a_circle's_area
-estimate_pi_empirical <- function(n){
-  dist <- get_distance(generate_points(n = n))
-  return(approx_pi(dist = dist))
-}
-
+# Main Function Resampling ------------------------------------------------
 
 # this function uses a probabilistic approach. The ratio of points that are
 # within the radius is sampled from a fitted gamma distribution. Currently, the 
-# mean of randomly generated data from this vector is used to 
+# mean of randomly generated data from this vector is used to estimate pi.
+
 estimate_pi_resampled <- function(n,
                                   outputLength = 1e6,
                                   samplingSize = 1e5,
                                   distr = "beta",
                                   plot = F){
   
+  # requires fitdistrplus...
   if(!require(fitdistrplus)){ 
     message("Install 'fitdistrplus' first!")
     return(NULL)
   }
   
-
+  
   # generate ratios from n
   # create gamma distribution
   if(distr == "beta"){
     rand <- generate_beta(calc_ratio(n, samplingSize = samplingSize, plot = plot),
-                        plot = plot, outputLength = outputLength)
+                          plot = plot, outputLength = outputLength)
     
   } else {
     rand <- generate_gamma(calc_ratio(n, samplingSize = samplingSize, plot = plot),
-                        plot = plot, outputLength = outputLength)
+                           plot = plot, outputLength = outputLength)
     
   }
   
@@ -170,9 +198,13 @@ estimate_pi_resampled <- function(n,
 }
 
 
+
+# MCMC-like Functions -----------------------------------------------------
+
 # MCMC-like algorithm, but instead of using a hastings ratio, I used the accuracy measure,
 # which kinda breaks the purpose of the MCMC, which is used when the true value is unknown.
 # But heck, its just for fun, right.
+
 MCMC_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   
   # 0.) initialize result vector and get a value for d
@@ -214,7 +246,7 @@ MCMC_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   return(x)
 }
 
-# Metropolis-Hastings Algo. same as above but with real hastings ratio
+# Metropolis-Hastings-like Algo. Same as above but with real hastings ratio
 MCMC_h_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   
   # 0.) initialize result vector and get a value for d
@@ -261,14 +293,19 @@ MCMC_h_Pi <- function(nInit = 1e6, samplingSize = 1e4, nSD = 1000, nIter){
   return(x)
 }
 
-
+#------------------------------------------------------------------------------#
 # Auxiliary Functions -----------------------------------------------------
+#------------------------------------------------------------------------------#
+
+# Methods to measure the accuracy of the estimates
 
 # the smaller the number the better
 accuracy_pi_estimate <- function(pi_estimate){
   return(abs(pi_estimate-pi))
 }
 
+
+# scoring function, the lower the absolute difference between pi and the estimate the better
 scoring <- function(res){
   if(res > 0.1){
     return(0)
@@ -352,7 +389,7 @@ mean_estimate <- function(n,
   
   if (type == "empirical"){
     for (i in 1:nIter){
-      estimate <- estimate_pi_empirical(n)
+      estimate <- accuracy_pi_estimate(estimate_pi_empirical(n))
       vecAccuracy = c(vecAccuracy, estimate)
     }
 
@@ -368,7 +405,7 @@ mean_estimate <- function(n,
   }
   # output formatting
   DF <- data.frame(nIter, mean(vecAccuracy), sd(vecAccuracy), min(vecAccuracy), max(vecAccuracy))
-  colnames(DF) <- c("Iterations", "Mean Score", "SD Score", "Min Score", "Max Score")
+  colnames(DF) <- c("Iterations", "Mean", "SD", "Min", "Max")
   return(DF)
 }
 
@@ -384,6 +421,12 @@ estimate_pi_resampled(n = 1e6,
                       samplingSize = 1e4,
                       plot = F,
                       distr = "beta")
+
+accuracy_pi_estimate(estimate_pi_resampled(n = 1e6,
+                                    outputLength = 1e6,
+                                    samplingSize = 1e4,
+                                    plot = F,
+                                    distr = "beta"))
 
 ### MCMC-like cheat algo (super accurate)
 posterior <- MCMC_Pi(nIter = 1e4)
@@ -405,7 +448,6 @@ abline(h=pi, col = "firebrick")
 
 
 # BenchMark (Speed) -------------------------------------------------------
-
 
 n = 1e6
 
@@ -433,8 +475,8 @@ norm
 
 
 # Accuracy of Estimate (raw)
-mean_estimate(n = 1e6, nIter = 100, type = "empirical")
-mean_estimate(n = 1e6, nIter = 100, type = "resampled")
+mean_estimate(n = 1e6, nIter = 10, type = "empirical")
+mean_estimate(n = 1e6, nIter = 10, type = "resampled")
 
 
 # As expected the accuracies are more or less the same
